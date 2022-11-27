@@ -317,7 +317,7 @@ def add_irrdv3_options(parser):
     )
     irr3_legacy_group.add_argument(
         "-O",
-        dest="host",
+        dest="forwarding_host",
         metavar="STR",
         type=str,
         help=f"{prefix} \" enclosed host/IP web origin string",
