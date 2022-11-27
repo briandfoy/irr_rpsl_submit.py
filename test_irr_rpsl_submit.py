@@ -1,8 +1,11 @@
 import os
+import pytest
 import re
 import subprocess
 import sys
 import unittest
+
+import irr_rpsl_submit
 
 IRRD_HOST="fake.example.com"
 IRRD_URL=f"http://{IRRD_HOST}"
@@ -69,7 +72,48 @@ class Runner():
 
         return raw_result
 
-class Test(unittest.TestCase):
+class ArgsParseMock(object):
+    """
+    Turns a dictionary into a class
+    """
+
+    def __init__(self, dictionary):
+        for key in dictionary:
+            setattr(self, key, dictionary[key])
+
+class Test_100_Units(unittest.TestCase):
+    def setUp(self):
+        irr_env_names = [ 'IRR_RPSL_SUBMIT_DEBUG', 'IRR_RPSL_SUBMIT_HOST', 'IRR_RPSL_SUBMIT_URL' ]
+        for name in irr_env_names:
+            os.unsetenv(name)
+
+    def tearDown(self):
+        pass
+
+    def test_choose_url(self):
+        table = [
+            { "expected": "http://localhost/v1/submit/",        "args": { "host": "localhost",   "port": None, "url": None } },
+            { "expected": "http://localhost:8080/v1/submit/",   "args": { "host": "localhost",   "port": 8080, "url": None } },
+            { "expected": "http://example.com:137/v1/submit/",  "args": { "host": "example.com", "port": 137,  "url": None } },
+
+            { "expected": "http://example.com:137/v1/submit/",  "args": { "host": None, "port": None, "url": "http://example.com:137/v1/submit/" } },
+            { "expected": "http://example.com/v1/submit/",      "args": { "host": None, "port": None, "url": "http://example.com/v1/submit/" } }
+        ];
+
+
+        for d in table:
+            args = ArgsParseMock(d["args"].copy())
+            # choose_url modifies args
+            irr_rpsl_submit.choose_url(args)
+            self.assertEqual( args.url, d["expected"], f"choose_url sets args.url to the expected URL" )
+
+    def test_choose_url_exception(self):
+        args_dict = { "host": None, "port": None, "url": None }
+        args = ArgsParseMock(args_dict.copy())
+        with pytest.raises(irr_rpsl_submit.XArgumentProcessing) as e:
+            irr_rpsl_submit.choose_url(args)
+
+class Test_900_Command(unittest.TestCase):
     def setUp(self):
         irr_env_names = [ 'IRR_RPSL_SUBMIT_DEBUG', 'IRR_RPSL_SUBMIT_HOST', 'IRR_RPSL_SUBMIT_URL' ]
         for name in irr_env_names:
@@ -116,20 +160,34 @@ class Test(unittest.TestCase):
         self.assertRegex( result.stderr, REGEX_NO_OBJECTS )
 
     def test_040_unresovlable_host(self):
-        url = UNRESOVABLE_URL
-        result = Runner.run( ['-u', url], ENV_EMPTY, RPSL_MINIMAL )
-        self.assertEqual( result.returncode, EXIT_NETWORK_ERROR, f"Unresolvable host in {url} exits with {EXIT_NETWORK_ERROR}" )
-        self.assertRegex( result.stderr, REGEX_UNRESOLVABLE )
+        table = [
+            [ '-u', UNRESOVABLE_URL  ],
+            [ '-h', UNRESOVABLE_HOST ],
+        ];
+
+        for row in table:
+            result = Runner.run( row, ENV_EMPTY, RPSL_MINIMAL )
+            self.assertEqual( result.returncode, EXIT_NETWORK_ERROR, f"Unresolvable host in {row[1]} exits with {EXIT_NETWORK_ERROR}" )
+            self.assertRegex( result.stderr, REGEX_UNRESOLVABLE )
 
     def test_040_unreachable_host(self):
-        url = UNREACHABLE_URL
-        result = Runner.run( ['-u', url], ENV_EMPTY, RPSL_MINIMAL )
-        self.assertEqual( result.returncode, EXIT_NETWORK_ERROR, f"Unreachable host in {url} with {EXIT_NETWORK_ERROR}" )
-        self.assertRegex( result.stderr, REGEX_UNREACHABLE )
+        table = [
+            [ '-u', UNREACHABLE_URL  ],
+            [ '-h', UNREACHABLE_HOST ],
+        ];
+
+        for row in table:
+            result = Runner.run( row, ENV_EMPTY, RPSL_MINIMAL )
+            self.assertEqual( result.returncode, EXIT_NETWORK_ERROR, f"Unreachable host in {row[1]} with {EXIT_NETWORK_ERROR}" )
+            self.assertRegex( result.stderr, REGEX_UNREACHABLE )
 
     def test_050_non_json_response(self):
-        url = BAD_RESPONSE_URL
-        result = Runner.run( ['-u', url], ENV_EMPTY, RPSL_MINIMAL )
-        self.assertEqual( result.returncode, EXIT_NETWORK_ERROR, f"Bad response URL {url} exits with {EXIT_NETWORK_ERROR}" )
-        self.assertRegex( result.stderr, REGEX_BAD_RESPONSE )
+        table = [
+            [ '-u', BAD_RESPONSE_URL  ],
+            # [ '-h', BAD_RESPONSE_HOST ], # turns into the right path, which ends up as not found
+        ];
+        for row in table:
+            result = Runner.run( row, ENV_EMPTY, RPSL_MINIMAL )
+            self.assertEqual( result.returncode, EXIT_NETWORK_ERROR, f"Bad response URL {row[1]} exits with {EXIT_NETWORK_ERROR}" )
+            self.assertRegex( result.stderr, REGEX_BAD_RESPONSE )
 
