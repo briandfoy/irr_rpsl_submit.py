@@ -77,6 +77,21 @@ class XArgumentError(argparse.ArgumentError):
     def __init__(self, arg):
         self.message = "Error parsing command-line options"
 
+    def exit_value(self):
+        return SysExitValues.ArgumentMisuse()
+
+    def warn_and_exit(self):
+        # argparse already takes care of the warning
+        sys.exit(self.exit_value())
+
+class XArgumentProcessing(Exception):
+    """
+    Raised when the program encounters a situation that should not
+    occur because something should have previously resolved it.
+    """
+    def __init__(self, message):
+        self.message = message
+
 class XHelp(argparse.ArgumentError):
     """
     Raised for argparse's help, which uses a non-zero exit
@@ -84,34 +99,71 @@ class XHelp(argparse.ArgumentError):
     def __init__(self):
         self.message = "display help message"
 
-class XHTTPConnectionFailed(Exception):
+class XNetwork(Exception):
+    """
+    General exception type for network problems
+    """
+    def __init__(self, url):
+        self.message = f"{self.prefix()}: {url}"
+
+    def exit_value(self):
+        return SysExitValues.NetworkError()
+
+    def prefix(self):
+        return "Network error"
+
+    def warn_and_exit(self):
+        sys.stderr.write(f"{self.prefix()}: {self.message}\n")
+        logger.critical("%s: %s", self.prefix, self.message)
+        sys.exit(self.exit_value())
+
+class XHTTPConnectionFailed(XNetwork):
     """
     Raised when urllib cannot connect
 
     This is a refinement of HTTPError, which is not granular enough
     to provide useful information to consumers.
     """
-    def __init__(self, url):
-        self.message = "Could not connect to {url}"
+    def prefix(self):
+        return "Connection refused"
 
-class XNameResolutionFailed(Exception):
+class XHTTPNotFound(XNetwork):
+    """
+    Raised when the response returns 404
+
+    This is a refinement of HTTPError, which is not granular enough
+    to provide useful information to consumers.
+    """
+    def prefix(self):
+        return "Not found"
+
+class XNameResolutionFailed(XNetwork):
     """
     Raised when urllib cannot resolve the URL host
 
     This is a refinement of HTTPError, which is not granular enough
     to provide useful information to consumers.
     """
-    def __init__(self, url):
-        self.message = f"Could not resolve host for {url}"
+    def prefix(self):
+        return "Could not resolve host"
 
-class XNoObjects(Exception):
+class XInput(Exception):
+    def exit_value(self):
+        return SysExitValues.InputError()
+
+    def warn_and_exit(self):
+        sys.stderr.write(f"{self.message}\n")
+        logger.critical(self.message)
+        sys.exit(self.exit_value())
+
+class XNoObjects(XInput):
     """
     Raised when there are no RPSL objects
     """
     def __init__(self):
         self.message = "There were no RPSL objects in the input"
 
-class XTooManyObjects(Exception):
+class XTooManyObjects(XInput):
     """
     Raised when there a delete operation gets more than one RPSL object
     """
@@ -126,10 +178,10 @@ def main(options):  # pragma: no cover
         args = process_args(options)
         logger.debug("Args are: %s", args)
     except XHelp as error:
-        # argparse's help option exists with non-zero, but don't do that.
+        # argparse's help option exits with non-zero, but don't do that.
         sys.exit(SysExitValues.Success())
     except XArgumentError as error:
-        sys.exit(SysExitValues.ArgumentMisuse())
+        error.warn_and_exit()
     except Exception as error: # pylint: disable=W0703
         logger.critical(
             "Some other error with command arguments (%s): %s",
@@ -141,10 +193,8 @@ def main(options):  # pragma: no cover
     try:
         rpsl = get_input()
         logger.debug("Input: ===\n%s\n===\n", rpsl)
-    except (XNoObjects, XTooManyObjects) as error:
-        sys.stderr.write(f"{error.message}\n")
-        logger.critical("Error in input (%s): %s", type(error).__name__, error.message)
-        sys.exit(SysExitValues.InputError())
+    except (XInput) as error:
+        error.warn_and_exit()
     except Exception as error: # pylint: disable=W0703
         logger.fatal(
             "Some other error with input (%s): %s",
@@ -155,19 +205,14 @@ def main(options):  # pragma: no cover
 
     try:
         result = send_request(rpsl, args)
-    except XNameResolutionFailed as error:
-        sys.stderr.write(f"{error.message}\n")
-        logger.critical("Network problem %s", error.message)
-        sys.exit(SysExitValues.NetworkError())
-    except XHTTPConnectionFailed as error:
-        sys.stderr.write(f"HTTP problem {error.message}\n")
-        logger.critical("HTTP problem %s", error.message)
-        sys.exit(SysExitValues.NetworkError())
+    except (XNetwork) as error:
+        error.warn_and_exit()
     except (HTTPError, URLError) as error:
-        logger.debug("HTTP problem: %s", error.reason)
+        print(error);
+        logger.debug("HTTP problem: %s = %s", args.url, error.reason)
         reason = re.sub( r'^.*?\]\s*', '', f"{error.reason}" )
-        sys.stderr.write(f"HTTP problem {reason}\n")
-        logger.critical("HTTP problem %s", reason)
+        sys.stderr.write(f"HTTP problem: {args.url} = {reason}\n")
+        logger.critical("HTTP problem: %s = %s", reason)
         sys.exit(SysExitValues.NetworkError())
     except JSONDecodeError as error:
         # turns out testing with example.com returns a real response
@@ -282,7 +327,7 @@ def add_irrdv3_options(parser):
         dest="port",
         metavar="PORT",
         type=str,
-        help=f"{prefix} IRRd port (use -u)",
+        help=f"IRRd port",
     )
     irr3_legacy_group.add_argument(
         "-r",
@@ -353,15 +398,26 @@ def at_least_one_change_was_rejected(result):
 
 def choose_url (args):
     """
-    Figure out the submission URL from -u or -h. This converts legacy
-    irrdv3 calls to the IRRdv4 API endpoint.
+    Set the args.url value to the appropriate value for the combination
+    of -h, -p, and -u.  This converts legacy irrdv3 calls to the IRRdv4
+    API endpoint.
 
-    argparse takes care of allowing only -u or -h
+    argparse takes care of allowing only -u or -h. At least one of those
+    should already be present.
+
+
     """
-    scheme = 'http'
+
     if args.host:
         scheme = 'http'
-        args.url = f"{scheme}://{args.host}/v1/submit/"
+        hostport = args.host
+
+        if args.port:
+            hostport += f":{args.port}"
+
+        args.url = f"{scheme}://{hostport}/v1/submit/"
+    elif not args.url:
+        raise XArgumentProcessing("choose_url did not get a host or url in the command-line arguments")
 
 def create_request_body(requests_text: str):
     """
@@ -555,15 +611,17 @@ def send_request(requests_text, args):
        http_response = request.urlopen(http_request, timeout=20) # pylint: disable=consider-using-with
     except URLError as error:
         reason = error.reason
+        print( reason )
         if isinstance(reason, socket.gaierror):
             raise XNameResolutionFailed(url)
-        elif isinstance(reason, socket.timeout):
+        elif isinstance(reason, socket.timeout) or isinstance(reason, ConnectionRefusedError):
             raise XHTTPConnectionFailed(url)
+        elif reason == 'Not Found':
+            raise XHTTPNotFound(url)
         else:
-            print(f"URLError: else block")
             raise error
     except Exception as error:
-        print(f"raw HTTP error {error}")
+        print("General exception");
         raise error
 
     response = json.loads(http_response.read().decode("utf-8"))
