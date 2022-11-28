@@ -113,8 +113,8 @@ class XNetwork(Exception):
         return "Network error"
 
     def warn_and_exit(self):
-        sys.stderr.write(f"{self.prefix()}: {self.message}\n")
-        logger.critical("%s: %s", self.prefix, self.message)
+        sys.stderr.write(f"{self.message}\n")
+        logger.critical(self.message)
         sys.exit(self.exit_value())
 
 class XHTTPConnectionFailed(XNetwork):
@@ -317,7 +317,7 @@ def add_irrdv3_options(parser):
     )
     irr3_legacy_group.add_argument(
         "-O",
-        dest="host",
+        dest="forwarding_host",
         metavar="STR",
         type=str,
         help=f"{prefix} \" enclosed host/IP web origin string",
@@ -404,8 +404,6 @@ def choose_url (args):
 
     argparse takes care of allowing only -u or -h. At least one of those
     should already be present.
-
-
     """
 
     if args.host:
@@ -611,7 +609,6 @@ def send_request(requests_text, args):
        http_response = request.urlopen(http_request, timeout=20) # pylint: disable=consider-using-with
     except URLError as error:
         reason = error.reason
-        print( reason )
         if isinstance(reason, socket.gaierror):
             raise XNameResolutionFailed(url)
         elif isinstance(reason, socket.timeout) or isinstance(reason, ConnectionRefusedError):
