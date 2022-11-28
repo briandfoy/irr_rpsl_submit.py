@@ -113,8 +113,8 @@ class XNetwork(Exception):
         return "Network error"
 
     def warn_and_exit(self):
-        sys.stderr.write(f"{self.prefix()}: {self.message}\n")
-        logger.critical("%s: %s", self.prefix, self.message)
+        sys.stderr.write(f"{self.message}\n")
+        logger.critical(self.message)
         sys.exit(self.exit_value())
 
 class XHTTPConnectionFailed(XNetwork):
