@@ -31,6 +31,7 @@ REGEX_NO_H_WITH_U   = re.compile("argument -h: not allowed with argument -u")
 REGEX_UNRESOLVABLE  = re.compile("Could not resolve")
 REGEX_UNREACHABLE   = re.compile("Connection refused")
 REGEX_BAD_RESPONSE  = re.compile("decoding JSON")
+REGEX_NOT_FOUND     = re.compile("Not found")
 
 EXIT_SUCCESS        =  0
 EXIT_ARGUMENT_ERROR =  2
@@ -141,6 +142,16 @@ class Test_900_Command(unittest.TestCase):
         result = Runner.run( ['-u', IRRD_URL, '-h', 'host'], ENV_EMPTY, RPSL_EMPTY )
         self.assertEqual( result.returncode, EXIT_ARGUMENT_ERROR, f"using both -u and -h exits with {EXIT_ARGUMENT_ERROR}" )
         self.assertRegex( result.stderr, REGEX_NO_H_WITH_U )
+
+    def test_020_dash_o_noop(self):
+        # If we get an error, it should be from the -h, not the -O
+        result = Runner.run( ['-h', UNREACHABLE_HOST, '-O', BAD_RESPONSE_HOST], ENV_EMPTY, RPSL_MINIMAL )
+        self.assertEqual( result.returncode, EXIT_NETWORK_ERROR, f"using both -h and -O exits with value appropriate to -h value" )
+        self.assertRegex( result.stderr, REGEX_UNREACHABLE )
+
+        result = Runner.run( ['-h', BAD_RESPONSE_HOST, '-O', UNREACHABLE_HOST], ENV_EMPTY, RPSL_MINIMAL )
+        self.assertEqual( result.returncode, EXIT_NETWORK_ERROR, f"using both -h and -O exits with value appropriate to -h value" )
+        self.assertRegex( result.stderr, REGEX_NOT_FOUND )
 
     def test_030_empty_input_option(self):
         result = Runner.run( ['-u', IRRD_URL], ENV_EMPTY, RPSL_EMPTY )
