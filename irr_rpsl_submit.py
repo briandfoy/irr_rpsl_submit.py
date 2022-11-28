@@ -404,8 +404,6 @@ def choose_url (args):
 
     argparse takes care of allowing only -u or -h. At least one of those
     should already be present.
-
-
     """
 
     if args.host:
