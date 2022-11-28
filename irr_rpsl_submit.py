@@ -609,7 +609,6 @@ def send_request(requests_text, args):
        http_response = request.urlopen(http_request, timeout=20) # pylint: disable=consider-using-with
     except URLError as error:
         reason = error.reason
-        print( reason )
         if isinstance(reason, socket.gaierror):
             raise XNameResolutionFailed(url)
         elif isinstance(reason, socket.timeout) or isinstance(reason, ConnectionRefusedError):
