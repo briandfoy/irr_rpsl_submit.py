@@ -143,6 +143,18 @@ class Test_900_Command(unittest.TestCase):
         self.assertEqual( result.returncode, EXIT_ARGUMENT_ERROR, f"using both -u and -h exits with {EXIT_ARGUMENT_ERROR}" )
         self.assertRegex( result.stderr, REGEX_NO_H_WITH_U )
 
+    def test_020_p_and_h_with_port(self):
+        host = "fakehost"
+        dash_p_port = "137"
+
+        result = Runner.run( ['-h', f"{host}:1234", '-p', dash_p_port], ENV_EMPTY, RPSL_MINIMAL )
+        # Since the literal fakehost won't resolve, we will get a
+        # network error exit, but that's not what we care about. We
+        # merely want to error message to see what the url value
+        # turned out to be:
+        self.assertEqual( result.returncode, EXIT_NETWORK_ERROR, f"-h with bad host is a network error" )
+        self.assertRegex( result.stderr, re.compile( f"{host}:{dash_p_port}" ), f"-h with port and -p prefers -p" )
+
     def test_020_dash_o_noop(self):
         # If we get an error, it should be from the -h, not the -O
         result = Runner.run( ['-h', UNREACHABLE_HOST, '-O', BAD_RESPONSE_HOST], ENV_EMPTY, RPSL_MINIMAL )

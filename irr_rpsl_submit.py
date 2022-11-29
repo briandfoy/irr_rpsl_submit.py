@@ -411,6 +411,10 @@ def choose_url (args):
         hostport = args.host
 
         if args.port:
+            # we don't validate hosts, so there might already be a
+            # port attached to it. That's fine, but if -p is specified,
+            # prefer that one.
+            hostport = re.sub(r":.*", "", hostport )
             hostport += f":{args.port}"
 
         args.url = f"{scheme}://{hostport}/v1/submit/"
