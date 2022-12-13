@@ -427,9 +427,9 @@ def create_request_body(requests_text: str):
     passwords or deletion requests.
     Returns a dict suitable as a JSON HTTP POST payload.
     """
-    passwords = []
-    overrides = []
-    rpsl_texts = []
+    passwords     = []
+    override      = None
+    rpsl_texts    = []
     delete_reason = ""
 
     requests_text = requests_text.replace("\r", "")
@@ -448,8 +448,11 @@ def create_request_body(requests_text: str):
                 password = line.split(":", maxsplit=1)[1].strip()
                 passwords.append(password)
             elif line.startswith("override:"):
-                override = line.split(":", maxsplit=1)[1].strip()
-                overrides.append(override)
+                password = line.split(":", maxsplit=1)[1].strip()
+                logger.debug(f"override password is {password}")
+                if override is not None and password != override:
+                    raise Exception("override encountered twice with different values")
+                override = password
             elif line.startswith("delete:"):
                 delete_reason = line.split(":", maxsplit=1)[1].strip()
             else:
@@ -461,7 +464,7 @@ def create_request_body(requests_text: str):
     result = {
         "objects": [{"object_text": rpsl_text} for rpsl_text in rpsl_texts],
         "passwords": passwords,
-        "overrides": overrides,
+        "override": override,
         "delete_reason": delete_reason,
     }
     return result
