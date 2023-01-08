@@ -89,6 +89,9 @@ class SysExitValues:
 
 
 class XBasic(Exception):
+    """
+    The base class for application-level exceptions.
+    """
     def __init__(self, message=""):
         self.message = message
 
@@ -147,8 +150,6 @@ class XArgumentProcessing(XBasic):
     they have been parsed
     """
 
-    pass
-
 
 class XHelp(XBasic):
     """
@@ -187,6 +188,7 @@ class XNetwork(XBasic):
     """
 
     def __init__(self, message, extra=""):
+        super().__init__(message)
         self.message = f"{self.prefix()}: {message}"
         self.extra = extra
 
@@ -257,11 +259,13 @@ class XNoObjects(XInput):
     one object in the input.
     """
 
-    pass
-
 
 class XResponse(XBasic):
+    """
+    Raised when there was an unexpected response.
+    """
     def __init__(self, message, extra):
+        super().__init__(message)
         self.message = f"{self.prefix()}: {message}"
         self.extra = extra
 
@@ -305,7 +309,7 @@ def run(options):
         print(output)
     except XBasic as error:
         error.warn_and_exit()
-    except Exception as error:
+    except Exception as error:  # pylint: disable=W0703
         sys.stderr.write(f"Some other error: {type(error).__name__} • {error}\n")
         logger.fatal("Some other error with input (%s): %s", type(error).__name__, error)
         sys.exit(SysExitValues.GeneralError())
@@ -540,6 +544,10 @@ def choose_url(args):
 
 
 def create_http_request(requests_text, args):
+    """
+    Set up everything for the HTTP request but don't make the actual
+    request just yet.
+    """
     metadata = args.metadata
     url = args.url
 
