@@ -14,6 +14,7 @@ use with RADb.
 """
 
 import argparse
+import http
 import json
 import logging
 import os
@@ -21,7 +22,6 @@ import re
 import socket
 import sys
 import textwrap
-from json import JSONDecodeError
 from urllib import request
 from urllib.error import HTTPError, URLError
 
@@ -348,11 +348,19 @@ def make_request(rpsl, args):
         logger.debug("HTTP problem: %s = %s", args.url, error.reason)
         reason = re.sub(r"^.*?\]\s*", "", f"{error.reason}")
         message = f"{args.url} = {reason}"
+        logger.debug(message)
         raise XNetwork(message, [rpsl, args]) from error
+    except http.client.BadStatusLine as error:
+        # This happens when we connect to a non-HTTP server, such as
+        # whois (or maybe hit a weird proxy). That responds, just not with HTTP.
+        message = f"The response did not look like HTTP. URL <{args.url}> returned the line:\n\t{error.line}"
+        logger.debug(message)
+        raise XResponse(message, [rpsl, args]) from error
     except json.decoder.JSONDecodeError as error:
         # turns out testing with www.example.com returns a real response
         # that's not the JSON we were expecting.
         message = f"HTTP response error decoding JSON: {error}"
+        logger.debug(message)
         raise XResponse(message, [rpsl, args]) from error
 
     return result
@@ -574,7 +582,7 @@ def create_http_request(requests_text, args):
         method=method,
         headers=headers,
     )
-    logger.debug("Submitting to %s; method %s}; headers %s; data %s", url, method, headers, http_data)
+    logger.debug("====\nSubmitting to %s\nMETHOD: %s\nHEADERS: %s\nDATA:\n%s\n====", url, method, headers, http_data)
 
     return http_request
 
