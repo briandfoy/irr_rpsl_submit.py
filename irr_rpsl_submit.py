@@ -92,6 +92,7 @@ class XBasic(Exception):
     """
     The base class for application-level exceptions.
     """
+
     def __init__(self, message=""):
         self.message = message
 
@@ -264,6 +265,7 @@ class XResponse(XBasic):
     """
     Raised when there was an unexpected response.
     """
+
     def __init__(self, message, extra):
         super().__init__(message)
         self.message = f"{self.prefix()}: {message}"
