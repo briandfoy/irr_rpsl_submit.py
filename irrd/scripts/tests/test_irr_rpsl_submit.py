@@ -1,4 +1,5 @@
 import json
+import http
 import io
 import os
 import pytest
@@ -443,6 +444,18 @@ class Test300MakeRequest(MyBase):
         self.assertEqual(args.url, UNREACHABLE_URL)
 
         irr_rpsl_submit.send_request = lambda rpsl, args: json.loads("{")
+
+        with pytest.raises(irr_rpsl_submit.XResponse):
+            irr_rpsl_submit.make_request(RPSL_MINIMAL, args)
+
+    def test_non_http_response(self):
+        options = ["-u", UNREACHABLE_URL]
+        args = irr_rpsl_submit.get_arguments(options)
+        self.assertEqual(args.url, UNREACHABLE_URL)
+
+        irr_rpsl_submit.send_request = lambda rpsl, args: my_raise(
+            http.client.BadStatusLine("not a status line")  # type: ignore
+        )
 
         with pytest.raises(irr_rpsl_submit.XResponse):
             irr_rpsl_submit.make_request(RPSL_MINIMAL, args)
