@@ -92,6 +92,7 @@ class XBasic(Exception):
     """
     XBasic is the base class for all application-level exceptions.
     """
+
     def __init__(self, message=""):
         self.message = message
 
@@ -267,6 +268,7 @@ class XResponse(XBasic):
     """
     Raised when there is an unexpected or invalid response.
     """
+
     def __init__(self, message, extra):  # pylint: disable=super-init-not-called
         self.message = f"{self.prefix()}: {message}"
         self.extra = extra
