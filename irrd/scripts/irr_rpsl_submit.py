@@ -22,7 +22,6 @@ import re
 import socket
 import sys
 import textwrap
-from json import JSONDecodeError
 from urllib import request
 from urllib.error import HTTPError, URLError
 
