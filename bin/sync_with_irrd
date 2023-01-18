@@ -1,0 +1,9 @@
+#!/bin/sh
+
+BASE=https://raw.githubusercontent.com/irrdnet/irrd/main/
+FILES="irrd/scripts/irr_rpsl_submit.py irrd/scripts/tests/test_irr_rpsl_submit.py"
+
+for f in $FILES
+do
+	wget $BASE/$f -O $f
+done
