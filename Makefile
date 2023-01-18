@@ -1,7 +1,9 @@
 PYTHON=python3
 MAX_LINE_LENGTH=120
-SCRIPT=irr_rpsl_submit.py
-TEST_FILE=tests/test_$(SCRIPT)
+BASE=irrd/scripts
+SCRIPT_NAME=irr_rpsl_submit.py
+SCRIPT_PATH=$(BASE)/$(SCRIPT_NAME)
+TEST_FILE=$(BASE)/tests/test_$(SCRIPT_NAME)
 
 ######################################################################
 # https://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
@@ -11,11 +13,11 @@ help: ## show a list of targets
 
 .PHONY: lint
 lint:
-	pylint --max-line-length $(MAX_LINE_LENGTH) $(SCRIPT)
+	pylint --max-line-length $(MAX_LINE_LENGTH) $(SCRIPT_PATH)
 
 .PHONY: tidy
 tidy:
-	black -t py37 -l $(MAX_LINE_LENGTH) --preview $(SCRIPT)
+	black -t py37 -l $(MAX_LINE_LENGTH) --preview $(SCRIPT_PATH)
 
 .PHONY: test
 test:
