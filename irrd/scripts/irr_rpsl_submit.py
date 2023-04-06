@@ -14,7 +14,6 @@ use with RADb.
 """
 
 import argparse
-import http
 import json
 import logging
 import os
@@ -22,6 +21,7 @@ import re
 import socket
 import sys
 import textwrap
+from json import JSONDecodeError
 from urllib import request
 from urllib.error import HTTPError, URLError
 
@@ -89,10 +89,6 @@ class SysExitValues:
 
 
 class XBasic(Exception):
-    """
-    XBasic is the base class for all application-level exceptions.
-    """
-
     def __init__(self, message=""):
         self.message = message
 
@@ -151,7 +147,7 @@ class XArgumentProcessing(XBasic):
     they have been parsed
     """
 
-    pass  # pylint: disable=unnecessary-pass
+    pass
 
 
 class XHelp(XBasic):
@@ -190,7 +186,7 @@ class XNetwork(XBasic):
     General exception type for network problems.
     """
 
-    def __init__(self, message, extra=""):  # pylint: disable=super-init-not-called
+    def __init__(self, message, extra=""):
         self.message = f"{self.prefix()}: {message}"
         self.extra = extra
 
@@ -261,15 +257,11 @@ class XNoObjects(XInput):
     one object in the input.
     """
 
-    pass  # pylint: disable=unnecessary-pass
+    pass
 
 
 class XResponse(XBasic):
-    """
-    Raised when there is an unexpected or invalid response.
-    """
-
-    def __init__(self, message, extra):  # pylint: disable=super-init-not-called
+    def __init__(self, message, extra):
         self.message = f"{self.prefix()}: {message}"
         self.extra = extra
 
@@ -286,15 +278,15 @@ class XResponse(XBasic):
         return "Response error"
 
 
-class XTooManyObjects(XInput):
+class XNotAllDeletes(XInput):
     """
-    Raised when there a delete operation gets more than one RPSL object.
-    IRRdv4 requires that any delete operation have exactly one object
-    in the request.
+    Raised when there a delete operation has at least one RPSL object
+    that does not have a delete: line. All objects in a DELETE operation
+    must have a delete: line.
     """
 
     def __init__(self):
-        super().__init__("There was more than one RPSL object. " + "A delete must have exactly one object.")
+        super().__init__("At least one object in the delete query did not have a delete: line")
 
 
 def run(options):
@@ -313,7 +305,7 @@ def run(options):
         print(output)
     except XBasic as error:
         error.warn_and_exit()
-    except Exception as error:  # pylint: disable=broad-except
+    except Exception as error:
         sys.stderr.write(f"Some other error: {type(error).__name__} • {error}\n")
         logger.fatal("Some other error with input (%s): %s", type(error).__name__, error)
         sys.exit(SysExitValues.GeneralError())
@@ -352,19 +344,11 @@ def make_request(rpsl, args):
         logger.debug("HTTP problem: %s = %s", args.url, error.reason)
         reason = re.sub(r"^.*?\]\s*", "", f"{error.reason}")
         message = f"{args.url} = {reason}"
-        logger.debug(message)
         raise XNetwork(message, [rpsl, args]) from error
-    except http.client.BadStatusLine as error:
-        # This happens when we connect to a non-HTTP server, such as
-        # whois (or maybe hit a weird proxy). That responds, just not with HTTP.
-        message = f"The response did not look like HTTP. URL <{args.url}> returned the line:\n\t{error.line}"
-        logger.debug(message)
-        raise XResponse(message, [rpsl, args]) from error
     except json.decoder.JSONDecodeError as error:
         # turns out testing with www.example.com returns a real response
         # that's not the JSON we were expecting.
         message = f"HTTP response error decoding JSON: {error}"
-        logger.debug(message)
         raise XResponse(message, [rpsl, args]) from error
 
     return result
@@ -556,10 +540,6 @@ def choose_url(args):
 
 
 def create_http_request(requests_text, args):
-    """
-    Set up everything for the HTTP request but don't make the actual
-    request just yet.
-    """
     metadata = args.metadata
     url = args.url
 
@@ -569,8 +549,6 @@ def create_http_request(requests_text, args):
 
     if not request_body["objects"]:
         raise XNoObjects("No RPSL objects were found after processing input.")
-    if is_delete and len(request_body["objects"]) > 1:
-        raise XTooManyObjects()
 
     method = "DELETE" if is_delete else "POST"
     http_data = json.dumps(request_body).encode("utf-8")
@@ -601,13 +579,19 @@ def create_request_body(rpsl: str):
     passwords = []
     override = None
     rpsl_texts = []
+
     delete_reason = ""
+    delete_object_count = 0
+    delete_line_re = re.compile(r"^delete:", re.M)
 
     rpsl = rpsl.replace("\r", "")
     for object_text in rpsl.split("\n\n"):
         object_text = object_text.strip()
         if not object_text:
             continue
+
+        if re.search(r"^delete:", object_text, flags=re.MULTILINE):
+            delete_object_count += 1
 
         rpsl_text = ""
 
@@ -632,12 +616,16 @@ def create_request_body(rpsl: str):
         if rpsl_text:
             rpsl_texts.append(rpsl_text)
 
+    if delete_object_count > 0 and delete_object_count != len(rpsl_texts):
+        raise XNotAllDeletes()
+
     result = {
         "objects": [{"object_text": rpsl_text} for rpsl_text in rpsl_texts],
         "passwords": passwords,
         "override": override,
         "delete_reason": delete_reason,
     }
+
     return result
 
 
@@ -865,7 +853,10 @@ def setup_argparse():
         "-u",
         dest="url",
         type=str,
-        help="IRRd submission API URL, e.g. https://rr.example.net/v1/submit/ (also set by IRR_RPSL_SUBMIT_URL)",  # pylint: disable=C0301
+        help=(  # pylint: disable=C0301
+            "IRRd submission API URL, e.g. https://rr.example.net/v1/submit/ (also set by"
+            " IRR_RPSL_SUBMIT_URL)"
+        ),
     )
 
     add_irrdv3_options(parser)
